@@ -2,3 +2,6 @@ Django
 whitenoise
 djangorestframework
 djangorestframework-simplejwt
+psycopg
+psycopg2
+psycopg2-binary
