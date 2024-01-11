@@ -1,3 +1,4 @@
 Django
 whitenoise
 djangorestframework
+rest_framework_simplejwt
