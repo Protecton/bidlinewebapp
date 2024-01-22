@@ -15,3 +15,12 @@ def index(request):
 @permission_classes([IsAuthenticated])
 def protected_view(request):
     return Response({"message": "This is a protected view."})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def protected_view(request):
+    return Response({"message": "This is a protected view."})
+
+# @api_view(['GET'])
+def unprotected_view(request):
+    return HttpResponse(f'<h1>Welcome to Bidline Services</h1>')

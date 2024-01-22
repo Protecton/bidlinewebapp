@@ -5,3 +5,6 @@ djangorestframework-simplejwt
 psycopg
 psycopg2
 psycopg2-binary
+openai
+weaviate-client
+langchain
