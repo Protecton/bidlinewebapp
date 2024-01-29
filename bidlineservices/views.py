@@ -1,10 +1,12 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse
 import json
+import weaviate
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from decouple import config
 
 # from .models import Project, Tasks
 # from .forms import CreateNewTask, CreateNewProject
@@ -20,6 +22,18 @@ def protected_view(request):
 
 # @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
+def weaviate_connection(request):
+  client = weaviate.Client(
+     url = "https://o8rdynkss2uddb4ldicfsg.c0.us-central1.gcp.weaviate.cloud",  # Replace with your endpoint
+     auth_client_secret=weaviate.AuthApiKey(config('api_key_weaviate')),  # Replace w/ your Weaviate instance API key
+     additional_headers = {
+         "X-OpenAI-Api-Key": config('OPENAI_APIKEY')  # Replace with your inference API key
+     }
+ )
+  return HttpResponse("success")
+   
+
+
 def bid_slice_text(request, text):
   print(text)
   class Document:
@@ -38,7 +52,7 @@ def bid_slice_text(request, text):
 
   # Create a Document instance with your dummy text
   text = """
-    REQUEST FOR PROPOSALS COMMUNICATIONS CONSULTING SERVICES
+    REQUESTS FOR PROPOSALS COMMUNICATIONS CONSULTING SERVICES
     I. GENERAL INFORMATION
     A. INTRODUCTION
     The Intergovernmental Personnel Benefit Cooperative (IPBC) is seeking proposals from

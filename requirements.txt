@@ -8,3 +8,4 @@ psycopg2-binary
 openai
 weaviate-client
 langchain
+python-decouple
