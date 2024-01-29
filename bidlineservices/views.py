@@ -18,9 +18,10 @@ def index(request):
 def protected_view(request):
     return Response({"message": "This is a protected view."})
 
-# @api_view(['GET'])
+# @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
-def bid_slice_text(request):
+def bid_slice_text(request, text):
+  print(text)
   class Document:
     def __init__(self, content, metadata={}):
         self.page_content = content
