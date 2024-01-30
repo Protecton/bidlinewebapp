@@ -2,6 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse
 import json
 import weaviate
+import psycopg2
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -22,7 +23,7 @@ def protected_view(request):
 
 # @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
-def weaviate_connection(request):
+def weaviate_connection():
   client = weaviate.Client(
      url = "https://o8rdynkss2uddb4ldicfsg.c0.us-central1.gcp.weaviate.cloud",  # Replace with your endpoint
      auth_client_secret=weaviate.AuthApiKey(config('api_key_weaviate')),  # Replace w/ your Weaviate instance API key
@@ -30,7 +31,90 @@ def weaviate_connection(request):
          "X-OpenAI-Api-Key": config('OPENAI_APIKEY')  # Replace with your inference API key
      }
  )
-  return HttpResponse("success")
+  return client
+
+def create_db_connection():
+  """
+  Creates and returns a connection to the PostgreSQL database.
+  
+  Returns:
+  psycopg2.connection: A connection object to the PostgreSQL database.
+  """
+  DB_HOST = config('DB_HOST')
+  DB_NAME = config('DB_NAME')
+  DB_USER = config('DB_USER')
+  DB_PASSWORD = config('DB_PW')
+
+  try:
+      conn = psycopg2.connect(
+          host=DB_HOST,
+          dbname=DB_NAME,
+          user=DB_USER,
+          password=DB_PASSWORD
+      )
+      return conn
+  except Exception as e:
+      return JsonResponse({"status": "error", "message": str(e)})
+
+def create_class_weaviate(request):
+  client = weaviate_connection()
+
+  if client.schema.exists("Question"):
+    client.schema.delete_class("Question")
+  class_obj = {
+      "class": "Question",
+      "vectorizer": "text2vec-openai",  # If set to "none" you must always provide vectors yourself. Could be any other "text2vec-*" also.
+      "moduleConfig": {
+          "text2vec-openai": {},
+          "generative-openai": {}  # Ensure the `generative-openai` module is used for generative queries
+      }
+  }
+
+  client.schema.create_class(class_obj)
+  return HttpResponse(200)
+
+def get_collections(request):
+  client = weaviate_connection()
+  schema = client.schema.get()
+  return JsonResponse(schema)
+
+def execute_queries(request):
+  """
+  Executes specific database queries and returns the results.
+
+  Args:
+  request: HttpRequest object
+
+  Returns:
+  JsonResponse: A JSON response containing the query results.
+  """
+  conn = create_db_connection()
+  if conn is None or conn.closed:
+      return JsonResponse({"status": "error", "message": "Database connection is not available"})
+
+  try:
+      cur = conn.cursor()
+      # Execute queries
+      cur.execute("SELECT * FROM Proposals")
+      proposals = cur.fetchall()
+      proposals_columns = [desc[0] for desc in cur.description]
+      proposals_data = [dict(zip(proposals_columns, row)) for row in proposals]
+
+      cur.execute("SELECT * FROM public.requests_for_proposals")
+      rfps = cur.fetchall()
+      rfps_columns = [desc[0] for desc in cur.description]
+      rfps_data = [dict(zip(rfps_columns, row)) for row in rfps]
+
+      # Return the results
+      return JsonResponse({
+          "status": "success",
+          "proposals": proposals_data,
+          "requests_for_proposals": rfps_data
+      })
+  except Exception as e:
+      return JsonResponse({"status": "error", "message": str(e)})
+  finally:
+      cur.close()  
    
 
 
