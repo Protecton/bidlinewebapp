@@ -182,3 +182,5 @@ FIREBASE_CREDENTIALS_PATH = 'bidlinewebapp/secret/firebase-credentials.json'
 # Inicializar la app de Firebase
 cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
 firebase_admin.initialize_app(cred)
+
+# ENV ADDED
