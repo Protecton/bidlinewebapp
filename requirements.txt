@@ -1,3 +1,4 @@
+# INSTALL DJANGO PLS
 Django
 whitenoise
 djangorestframework
