@@ -161,7 +161,7 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-OPENAI_APIKEY = config('OPENAI_APIKEY')
+OPENAI_APIKEY = config('OPENAI_APIKEY', default='123')
 
 api_key_weaviate = config('api_key_weaviate')
 
