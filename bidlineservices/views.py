@@ -7,7 +7,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from firebase_admin import auth
+# from firebase_admin.auth import InvalidIdToken
+from .supabase_client import init_supabase
 from decouple import config
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 
 # from .models import Project, Tasks
 # from .forms import CreateNewTask, CreateNewProject
@@ -15,6 +20,105 @@ from decouple import config
 # Create your views here.
 def index(request):
   return HttpResponse(f'<h1>Welcome to Bidline Services</h1>')
+
+@csrf_exempt
+def get_supabase_table(request):
+  supabase = init_supabase()
+  response = supabase.table("users").select("*").execute()
+  print(response.data)
+  # Verificar que la respuesta tenga datos y que 'data' sea una lista
+  if response:
+    # Devuelve los datos en la respuesta JSON
+    return JsonResponse({"res": response.data}, safe=False)
+  else:
+    return JsonResponse({"error": "No se encontraron datos"}, status=404)
+
+# @csrf_protect
+# @api_view(['POST'])
+@csrf_exempt
+def verify_firebase_token(request):
+  token = request.headers.get('Authorization').split(' ').pop()
+  try:
+    decoded_token = auth.verify_id_token(token)
+    uid = decoded_token['uid']
+    return JsonResponse({'message': 'Token verificado', 'uid': uid})
+  except:
+    return JsonResponse({'error': 'Token inválido'}, status=401)
+
+# @api_view(['POST'])
+@csrf_exempt
+def create_new_firebase_user(request):
+  request_body = json.loads(request.body.decode('utf-8'))
+
+  new_email = request_body['email']
+  new_password = request_body['password']
+  new_display_name = request_body['display_name']
+
+  try:
+    user = auth.create_user(
+      email = new_email,
+      email_verified = False,
+      password = new_password,
+      display_name = new_display_name,
+      disabled = False
+    )
+
+    user_data = {
+      "uid": user.uid,
+      "email": user.email,
+      "display_name": user.display_name,
+      "email_verified": user.email_verified,
+      "disabled": user.disabled,
+      # Añade otros campos relevantes que quieras devolver
+    }
+
+    return JsonResponse({'message': 'Usuario creado', 'user': user_data})
+  except Exception as error:
+    print(error)
+    return JsonResponse({'error': 'Error al crear el usuario'}, status=401)
+
+# @api_view(['GET'])
+@csrf_exempt
+def get_user_by_email(request):
+  try:
+    user_email = request.GET.get('user_email')
+
+    user = auth.get_user_by_email(user_email)
+    
+    return JsonResponse({'message': 'Usuario obtenido', 'user': user.uid})
+  except:
+    return JsonResponse({'error': 'Error al obtener el usuario'}, status=401)
+
+# @api_view(['PUT'])
+@csrf_exempt
+def update_firebase_user(request):
+  request_body = json.loads(request.body.decode('utf-8'))
+
+  user_uid = request_body['user_uid']
+  new_email = request_body['email']
+  new_password = request_body['password']
+  new_display_name = request_body['display_name']
+
+  try:
+    auth.update_user(
+      user_uid,
+      email = new_email,
+      password = new_password,
+      display_name = new_display_name
+    )
+    return JsonResponse({'message': 'Usuario actualizado', 'user': user_uid})
+  except:
+    return JsonResponse({'error': 'Error al actualizar el usuario'}, status=401)
+
+# @api_view(['DELETE'])
+@csrf_exempt
+def delete_firebase_user(request):
+  user_uid = request.GET.get('user_uid')
+  try:
+    auth.delete_user(user_uid)
+    return JsonResponse({'message': 'Usuario eliminado', 'user': user_uid})
+  except:
+    return JsonResponse({'error': 'Error al eliminar el usuario'}, status=401)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

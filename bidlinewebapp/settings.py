@@ -9,14 +9,14 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
-
+import firebase_admin
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+from firebase_admin import credentials
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -30,7 +30,6 @@ DEBUG = True
 ALLOWED_HOSTS = [
   '*'
 ]
-
 
 # Application definition
 
@@ -106,10 +105,19 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',
         'USER': 'postgres',
-        'PASSWORD': 'FletesTech@29',
-        'HOST': 'db.tcfpcdplquiquhhagukk.supabase.co',
+        'PASSWORD': '$80W+R(Y2BhCsO',
+        'HOST': 'database-1.cd6kquc0uxyn.us-east-1.rds.amazonaws.com',
         'PORT': '5432',
     }
+    # user=postgres.tzcbqlerwphlcjikmspg password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
+    # 'supabase': {
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': 'postgres',
+    #     'USER': 'postgres.tzcbqlerwphlcjikmspg',  # Normalmente es 'postgres' en Supabase
+    #     'PASSWORD': 'contraseña_supabase',
+    #     'HOST': 'aws-0-us-east-1.pooler.supabase.com',
+    #     'PORT': '6543',
+    # }
 }
 
 # Password validation
@@ -159,8 +167,18 @@ api_key_weaviate = config('api_key_weaviate')
 
 DB_HOST = config('DB_HOST')
 
-DB_NAME = ('DB_NAME')
+DB_NAME = config('DB_NAME')
 
-DB_USER = ('DB_USER')
+DB_USER = config('DB_USER')
 
-DB_PW = ('DB_PW')
+DB_PW = config('DB_PW')
+
+SUPABASE_URL = "https://tzcbqlerwphlcjikmspg.supabase.co"
+SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6Y2JxbGVyd3BobGNqaWttc3BnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDE3OTgxMDYsImV4cCI6MjAxNzM3NDEwNn0.-WxwrhnQYFB6mtqpQlg-9U4m72ML-2HLxDErVZYmlrM"
+
+# Ruta al archivo de credenciales
+FIREBASE_CREDENTIALS_PATH = 'bidlinewebapp/secret/firebase-credentials.json'
+
+# Inicializar la app de Firebase
+cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+firebase_admin.initialize_app(cred)

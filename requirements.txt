@@ -9,3 +9,4 @@ openai
 weaviate-client
 langchain
 python-decouple
+firebase-admin

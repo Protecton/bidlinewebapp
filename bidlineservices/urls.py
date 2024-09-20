@@ -11,4 +11,10 @@ urlpatterns = [
   path('get_collections/', views.get_collections),
   path('create_db_connection/', views.create_db_connection),
   path('execute_queries/', views.execute_queries),
+  path('verify-fbtoken/', views.verify_firebase_token),
+  path('getbyemail-fbuser/', views.get_user_by_email),
+  path('create-fbuser/', views.create_new_firebase_user),
+  path('update-fbuser/', views.update_firebase_user),
+  path('delete-fbuser/', views.delete_firebase_user),
+  path('supabase/gettable', views.get_supabase_table),
 ]
