@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import firebase_admin
+import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
@@ -92,6 +93,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bidlinewebapp.wsgi.application'
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

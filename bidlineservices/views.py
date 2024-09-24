@@ -128,13 +128,16 @@ def protected_view(request):
 # @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
 def weaviate_connection():
+  print(config('api_key_weaviate'))
   client = weaviate.Client(
      url = "https://o8rdynkss2uddb4ldicfsg.c0.us-central1.gcp.weaviate.cloud",  # Replace with your endpoint
      auth_client_secret=weaviate.AuthApiKey(config('api_key_weaviate')),  # Replace w/ your Weaviate instance API key
      additional_headers = {
          "X-OpenAI-Api-Key": config('OPENAI_APIKEY')  # Replace with your inference API key
      }
- )
+  )
+
+
   return client
 
 def create_db_connection():
@@ -163,10 +166,10 @@ def create_db_connection():
 def create_class_weaviate(request):
   client = weaviate_connection()
 
-  if client.schema.exists("Question"):
-    client.schema.delete_class("Question")
+  if client.schema.exists("TestingConn"):
+    client.schema.delete_class("TestingConn")
   class_obj = {
-      "class": "Question",
+      "class": "TestingConn",
       "vectorizer": "text2vec-openai",  # If set to "none" you must always provide vectors yourself. Could be any other "text2vec-*" also.
       "moduleConfig": {
           "text2vec-openai": {},
