@@ -11,3 +11,4 @@ weaviate-client
 langchain
 python-decouple
 firebase-admin
+supabase
