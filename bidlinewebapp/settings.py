@@ -167,7 +167,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_APIKEY = config('OPENAI_APIKEY', default='123')
 
-api_key_weaviate = config('api_key_weaviate')
+api_key_weaviate = config('api_key_weaviate', default='123')
 
 DB_HOST = config('DB_HOST')
 
