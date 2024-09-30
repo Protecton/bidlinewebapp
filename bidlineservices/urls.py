@@ -8,6 +8,8 @@ urlpatterns = [
   path('slice-text/<str:text>', views.bid_slice_text),
   # path('weaviate-connection/', views.weaviate_connection),
   path('create_objects_weaviate/', views.create_class_weaviate),
+  path('insert-phrase/', views.insert_phrase),
+  path('process-supabase-openai-prompt/', views.process_supabase_openai_prompt),
   path('get_collections/', views.get_collections),
   path('create_db_connection/', views.create_db_connection),
   path('execute_queries/', views.execute_queries),

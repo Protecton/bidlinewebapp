@@ -180,6 +180,7 @@ DB_USER = config('DB_USER')
 DB_PW = config('DB_PW')
 
 SUPABASE_URL = "https://tzcbqlerwphlcjikmspg.supabase.co"
+
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6Y2JxbGVyd3BobGNqaWttc3BnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDE3OTgxMDYsImV4cCI6MjAxNzM3NDEwNn0.-WxwrhnQYFB6mtqpQlg-9U4m72ML-2HLxDErVZYmlrM"
 
 # Ruta al archivo de credenciales

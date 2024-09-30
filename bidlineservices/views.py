@@ -10,9 +10,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from firebase_admin import auth
 # from firebase_admin.auth import InvalidIdToken
 from .supabase_client import init_supabase
+from .openai_client import init_openai
 from decouple import config
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.csrf import csrf_protect
+from random import randint
 
 # from .models import Project, Tasks
 # from .forms import CreateNewTask, CreateNewProject
@@ -32,6 +33,89 @@ def get_supabase_table(request):
     return JsonResponse({"res": response.data}, safe=False)
   else:
     return JsonResponse({"error": "No se encontraron datos"}, status=404)
+
+@csrf_exempt
+def insert_phrase(request):
+  if request.method == "POST":
+    try:
+      # Capturar los datos enviados en el cuerpo del POST request
+      data = json.loads(request.body)
+
+      # Verificar si el campo 'content' está en los datos recibidos
+      if "content" not in data:
+          return JsonResponse({"error": "Falta el campo 'content' en los datos de la solicitud"}, status=400)
+
+      content = data["content"]
+
+      # Inicializar Supabase e insertar la frase
+      supabase = init_supabase()
+      insert_response = supabase.table("phrases").insert({"content": content}).execute()
+
+      # Verificar si la inserción fue exitosa
+      if insert_response.data:
+          return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+      else:
+          return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+
+    except json.JSONDecodeError:
+      return JsonResponse({"error": "Datos JSON inválidos"}, status=400)
+  else:
+    return JsonResponse({"error": "Método no permitido, usa POST"}, status=405)
+  
+@csrf_exempt
+def process_supabase_openai_prompt(request):
+  supabase = init_supabase()
+  id_to_get = randint(1, 5)
+  # id_to_get = 3
+  print(id_to_get)
+  # Seleccionar la fila con id igual a 1 de la tabla 'phrases'
+  response = supabase.table("phrases").select("*").eq("id", id_to_get).execute()
+  print(response.data[0]["content"])
+  # Verificar que la respuesta tenga datos
+  if response.data:
+    content = response.data[0]["content"]
+
+    # Inicializar OpenAI
+    openai = init_openai()
+
+    # Procesar el contenido con OpenAI GPT-3/4
+    try:
+      # openai_response = openai.Completion.create(
+      #   engine="text-davinci-003",  # Puedes elegir el modelo que prefieras
+      #   prompt=f"Por favor, procesa este contenido: {content}",
+      #   max_tokens=100,
+      #   n=1,
+      #   stop=None,
+      #   temperature=0.7,
+      # )
+      print("OPENAI INIT")
+      openai_response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": content}]
+      )
+
+      openai_response_content = openai_response.choices[0].message.content
+
+      print("OPENAI RES")
+      print(openai_response.choices[0].message.content)
+      # Extraer el resultado generado
+      # processed_content = openai_response.choices[0].text.strip()
+
+      # Devolver la respuesta procesada
+      # Guardar la respuesta en la tabla `openaires` en Supabase
+      insert_response = supabase.table("openaires").insert({"prompt": content, "response": openai_response_content}).execute()
+
+      # Verificar si la inserción fue exitosa
+      if insert_response.data:
+        return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+      else:
+        return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+    except Exception as error:
+      # handle the exception
+      print("An exception occurred:", error) # An exception occurred: division by zero
+      return JsonResponse({"error": error}, status=500)
+  else:
+    return JsonResponse({"error": "No se encontró la frase con id 1"}, status=404)
 
 # @csrf_protect
 # @api_view(['POST'])
