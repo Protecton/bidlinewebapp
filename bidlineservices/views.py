@@ -15,6 +15,20 @@ from decouple import config
 from django.views.decorators.csrf import csrf_exempt
 from random import randint
 
+from .services.supabase_service import get_prompt_from_supabase, get_function_prompt_from_supabase, save_response_to_supabase
+from .services.openai_service import process_prompt_with_openai
+from .utils.utils import concatenar_valores
+from .ai_functions.owner_name import owner_name_v1
+from .ai_functions.requirements_summary import requirements_summary_v1
+from .ai_functions.goals import goals_v1
+from .ai_functions.dates import dates_v1
+from .ai_functions.intro import intro_v1
+from .ai_functions.action_plan import action_plan_v1
+from .ai_functions.timeline import timeline_v1
+from .ai_functions.required_extra_info import required_extra_info_v1
+from .ai_functions.past_experience import past_experience_v1
+from .ai_functions.closing import closing_v1
+
 # from .models import Project, Tasks
 # from .forms import CreateNewTask, CreateNewProject
 
@@ -26,7 +40,7 @@ def index(request):
 def get_supabase_table(request):
   supabase = init_supabase()
   response = supabase.table("users").select("*").execute()
-  print(response.data)
+
   # Verificar que la respuesta tenga datos y que 'data' sea una lista
   if response:
     # Devuelve los datos en la respuesta JSON
@@ -49,7 +63,7 @@ def insert_phrase(request):
 
       # Inicializar Supabase e insertar la frase
       supabase = init_supabase()
-      insert_response = supabase.table("phrases").insert({"content": content}).execute()
+      insert_response = supabase.table("prompts").insert({"content": content}).execute()
 
       # Verificar si la inserción fue exitosa
       if insert_response.data:
@@ -61,61 +75,131 @@ def insert_phrase(request):
       return JsonResponse({"error": "Datos JSON inválidos"}, status=400)
   else:
     return JsonResponse({"error": "Método no permitido, usa POST"}, status=405)
-  
+
+# Bloques asíncronos
+
 @csrf_exempt
 def process_supabase_openai_prompt(request):
-  supabase = init_supabase()
-  id_to_get = randint(1, 5)
-  # id_to_get = 3
-  print(id_to_get)
-  # Seleccionar la fila con id igual a 1 de la tabla 'phrases'
-  response = supabase.table("phrases").select("*").eq("id", id_to_get).execute()
-  print(response.data[0]["content"])
-  # Verificar que la respuesta tenga datos
-  if response.data:
-    content = response.data[0]["content"]
+  try:
+    promps_notes = []
+    supabase_notes = []
 
-    # Inicializar OpenAI
-    openai = init_openai()
+    request_body = json.loads(request.body.decode('utf-8'))
 
-    # Procesar el contenido con OpenAI GPT-3/4
-    try:
-      # openai_response = openai.Completion.create(
-      #   engine="text-davinci-003",  # Puedes elegir el modelo que prefieras
-      #   prompt=f"Por favor, procesa este contenido: {content}",
-      #   max_tokens=100,
-      #   n=1,
-      #   stop=None,
-      #   temperature=0.7,
-      # )
-      print("OPENAI INIT")
-      openai_response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": content}]
-      )
+    request_for_proposal = request_body['request_for_proposal']
+    company_info = request_body['company_info']
+    past_projects = request_body['past_projects']
 
-      openai_response_content = openai_response.choices[0].message.content
+    owner_name_v1_params = [request_for_proposal]
+    requirements_summary_v1_params = [request_for_proposal]
+    goals_v1_params = [request_for_proposal]
+    dates_v1_params = [request_for_proposal]
+    intro_v1_params = [company_info, request_for_proposal]
+    action_plan_v1_params = [company_info, request_for_proposal]
 
-      print("OPENAI RES")
-      print(openai_response.choices[0].message.content)
-      # Extraer el resultado generado
-      # processed_content = openai_response.choices[0].text.strip()
+    owner_name_response = owner_name_v1(owner_name_v1_params)
+    requirements_summary_response = requirements_summary_v1(requirements_summary_v1_params)
+    goals_response = goals_v1(goals_v1_params)
+    dates_response = dates_v1(dates_v1_params)
+    intro_response = intro_v1(intro_v1_params)
+    action_plan_response = action_plan_v1(action_plan_v1_params)
 
-      # Devolver la respuesta procesada
-      # Guardar la respuesta en la tabla `openaires` en Supabase
-      insert_response = supabase.table("openaires").insert({"prompt": content, "response": openai_response_content}).execute()
+    timeline_v1_params = [company_info, action_plan_response[1], request_for_proposal]
+    required_extra_info_v1_params = [company_info, action_plan_response[1], request_for_proposal, request_for_proposal]
+    past_experience_v1_params = [company_info, action_plan_response[1], request_for_proposal, past_projects, request_for_proposal]
 
-      # Verificar si la inserción fue exitosa
-      if insert_response.data:
-        return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
-      else:
-        return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
-    except Exception as error:
-      # handle the exception
-      print("An exception occurred:", error) # An exception occurred: division by zero
-      return JsonResponse({"error": error}, status=500)
-  else:
-    return JsonResponse({"error": "No se encontró la frase con id 1"}, status=404)
+    timeline_response = timeline_v1(timeline_v1_params)
+    required_extra_info_response = required_extra_info_v1(required_extra_info_v1_params)
+    past_experience_response = past_experience_v1(past_experience_v1_params)
+
+    closing_v1_params = [request_for_proposal, company_info, action_plan_response[1], past_projects, past_experience_response[1], intro_response[1]]
+    
+    closing_response = closing_v1(closing_v1_params)
+
+    #if not owner_name_response:
+      #return JsonResponse({"message": "Error al procesar el prompt. Verifique el número de parámetros o llamadas externas."}, safe=False)
+    
+    if not owner_name_response:
+      promps_notes.append("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not requirements_summary_response:
+      promps_notes.append("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not goals_response:
+      promps_notes.append("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not dates_response:
+      promps_notes.append("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not intro_response:
+      promps_notes.append("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
+      
+    if not action_plan_response:
+      promps_notes.append("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not timeline_response:
+      promps_notes.append("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not required_extra_info_response:
+      promps_notes.append("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
+
+    if not past_experience_response:
+      promps_notes.append("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not closing_response:
+      promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
+    
+    # Guardar la respuesta en Supabase (OPCIONAL)
+    owner_name_supabase_response = save_response_to_supabase(owner_name_response[0], owner_name_response[1])
+    requirements_summary_supabase_response = save_response_to_supabase(requirements_summary_response[0], requirements_summary_response[1])
+    goals_supabase_response = save_response_to_supabase(goals_response[0], goals_response[1])
+    dates_supabase_response = save_response_to_supabase(dates_response[0], dates_response[1])
+    intro_supabase_response = save_response_to_supabase(intro_response[0], intro_response[1])
+    action_plan_supabase_response = save_response_to_supabase(action_plan_response[0], action_plan_response[1])
+    timeline_supabase_response = save_response_to_supabase(timeline_response[0], timeline_response[1])
+    required_extra_info_supabase_response = save_response_to_supabase(required_extra_info_response[0], required_extra_info_response[1])
+    past_experience_supabase_response = save_response_to_supabase(past_experience_response[0], past_experience_response[1])
+    closing_supabase_response = save_response_to_supabase(closing_response[0], closing_response[1])
+
+    if not owner_name_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de owner_name_v1 en la base de datos")
+    
+    if not requirements_summary_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de requirements_summary_v1 en la base de datos")
+    
+    if not goals_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de goals_v1 en la base de datos")
+    
+    if not dates_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de dates_v1 en la base de datos")
+    
+    if not intro_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de intro_v1 en la base de datos")
+    
+    if not action_plan_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de action_plan_v1 en la base de datos")
+    
+    if not timeline_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de timeline_v1 en la base de datos")
+
+    if not required_extra_info_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de required_extra_info_v1 en la base de datos")
+
+    if not past_experience_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de past_experience_v1 en la base de datos")
+
+    if not closing_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de closing_v1 en la base de datos")
+
+    if len(promps_notes) > 0 or len(supabase_notes) > 0:
+      print(promps_notes)
+      print(supabase_notes)
+      return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+    else:
+      return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+  except NameError:
+    print(NameError)
+    return JsonResponse({"error": "Error al procesar la solicitud en el servidor"}, status=500)
 
 # @csrf_protect
 # @api_view(['POST'])
@@ -212,7 +296,6 @@ def protected_view(request):
 # @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
 def weaviate_connection():
-  print(config('api_key_weaviate'))
   client = weaviate.Client(
      url = "https://o8rdynkss2uddb4ldicfsg.c0.us-central1.gcp.weaviate.cloud",  # Replace with your endpoint
      auth_client_secret=weaviate.AuthApiKey(config('api_key_weaviate')),  # Replace w/ your Weaviate instance API key
@@ -310,7 +393,6 @@ def execute_queries(request):
 
 
 def bid_slice_text(request, text):
-  print(text)
   class Document:
     def __init__(self, content, metadata={}):
         self.page_content = content
