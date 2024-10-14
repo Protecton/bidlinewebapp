@@ -14,6 +14,8 @@ from .openai_client import init_openai
 from decouple import config
 from django.views.decorators.csrf import csrf_exempt
 from random import randint
+from datetime import datetime
+import asyncio
 
 from .services.supabase_service import get_prompt_from_supabase, get_function_prompt_from_supabase, save_response_to_supabase
 from .services.openai_service import process_prompt_with_openai
@@ -79,7 +81,7 @@ def insert_phrase(request):
 # Bloques asíncronos
 
 @csrf_exempt
-def process_supabase_openai_prompt(request):
+async def process_supabase_openai_prompt(request):
   try:
     promps_notes = []
     supabase_notes = []
@@ -97,108 +99,158 @@ def process_supabase_openai_prompt(request):
     intro_v1_params = [company_info, request_for_proposal]
     action_plan_v1_params = [company_info, request_for_proposal]
 
-    owner_name_response = owner_name_v1(owner_name_v1_params)
-    requirements_summary_response = requirements_summary_v1(requirements_summary_v1_params)
-    goals_response = goals_v1(goals_v1_params)
-    dates_response = dates_v1(dates_v1_params)
-    intro_response = intro_v1(intro_v1_params)
-    action_plan_response = action_plan_v1(action_plan_v1_params)
+    tasks = [
+      asyncio.create_task(intro_v1(intro_v1_params)),
+      asyncio.create_task(action_plan_v1(action_plan_v1_params)),
+      asyncio.create_task(owner_name_v1(owner_name_v1_params)),
+      asyncio.create_task(requirements_summary_v1(requirements_summary_v1_params)),
+      asyncio.create_task(goals_v1(goals_v1_params)),
+      asyncio.create_task(dates_v1(dates_v1_params))
+    ]
 
-    timeline_v1_params = [company_info, action_plan_response[1], request_for_proposal]
-    required_extra_info_v1_params = [company_info, action_plan_response[1], request_for_proposal, request_for_proposal]
-    past_experience_v1_params = [company_info, action_plan_response[1], request_for_proposal, past_projects, request_for_proposal]
+    completed_count = 0
+    threshold = 2  # Queremos ejecutar `next_operation` cuando 2 tareas hayan terminado
+    collected_results = []  # Lista para almacenar los resultados de las tareas completadas
 
-    timeline_response = timeline_v1(timeline_v1_params)
-    required_extra_info_response = required_extra_info_v1(required_extra_info_v1_params)
-    past_experience_response = past_experience_v1(past_experience_v1_params)
+    while completed_count < threshold:
+      # Espera a que una tarea termine
+      done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-    closing_v1_params = [request_for_proposal, company_info, action_plan_response[1], past_projects, past_experience_response[1], intro_response[1]]
+      # Recoger los resultados de las tareas completadas
+      for task in done:
+        collected_results.append(task.result())
+      
+      # Incrementar el contador de tareas completadas
+      completed_count += len(done)
+
+      # Actualizar las tareas pendientes
+      tasks = list(pending)
+
+      print(f"Tareas completadas: {completed_count}")
+
+    # Cuando se hayan completado el número de tareas especificadas, ejecutamos `next_operation`
+    if collected_results:
+      
+      intro_response = collected_results[0]
+      action_plan_response = collected_results[1]
+
+      timeline_v1_params = [company_info, action_plan_response[1], request_for_proposal]
+      required_extra_info_v1_params = [company_info, action_plan_response[1], request_for_proposal, request_for_proposal]
+      past_experience_v1_params = [company_info, action_plan_response[1], request_for_proposal, past_projects, request_for_proposal]
+
+      timeline_response = await timeline_v1(timeline_v1_params)
+      required_extra_info_response = await required_extra_info_v1(required_extra_info_v1_params)
+      past_experience_response = await past_experience_v1(past_experience_v1_params)
+
+      closing_v1_params = [request_for_proposal, company_info, action_plan_response[1], past_projects, past_experience_response[1], intro_response[1]]
+      
+      closing_response = await closing_v1(closing_v1_params)
+
+      # Esperar las tareas restantes (si las hay)
+      for task in tasks:
+        result = await task
+        collected_results.append(result)
+      
+      owner_name_response = collected_results[2]
+      requirements_summary_response = collected_results[3]
+      goals_response = collected_results[4]
+      dates_response = collected_results[5]
+
+      if not owner_name_response:
+        promps_notes.append("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
     
-    closing_response = closing_v1(closing_v1_params)
+      if not requirements_summary_response:
+        promps_notes.append("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not goals_response:
+        promps_notes.append("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not dates_response:
+        promps_notes.append("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not intro_response:
+        promps_notes.append("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
+        
+      if not action_plan_response:
+        promps_notes.append("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not timeline_response:
+        promps_notes.append("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not required_extra_info_response:
+        promps_notes.append("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
+
+      if not past_experience_response:
+        promps_notes.append("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
+      
+      if not closing_response:
+        promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
+      
+      # Guardar la respuesta en Supabase (OPCIONAL)
+      owner_name_supabase_response = save_response_to_supabase(owner_name_response[0], owner_name_response[1])
+      requirements_summary_supabase_response = save_response_to_supabase(requirements_summary_response[0], requirements_summary_response[1])
+      goals_supabase_response = save_response_to_supabase(goals_response[0], goals_response[1])
+      dates_supabase_response = save_response_to_supabase(dates_response[0], dates_response[1])
+      intro_supabase_response = save_response_to_supabase(intro_response[0], intro_response[1])
+      action_plan_supabase_response = save_response_to_supabase(action_plan_response[0], action_plan_response[1])
+      timeline_supabase_response = save_response_to_supabase(timeline_response[0], timeline_response[1])
+      required_extra_info_supabase_response = save_response_to_supabase(required_extra_info_response[0], required_extra_info_response[1])
+      past_experience_supabase_response = save_response_to_supabase(past_experience_response[0], past_experience_response[1])
+      closing_supabase_response = save_response_to_supabase(closing_response[0], closing_response[1])
+
+      concatenated_supabase_response = save_response_to_supabase("Intro, Proposal, Closing", f"{intro_response[1]} {action_plan_response[1]} {closing_response[1]}")
+      
+      if not owner_name_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de owner_name_v1 en la base de datos")
+      
+      if not requirements_summary_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de requirements_summary_v1 en la base de datos")
+      
+      if not goals_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de goals_v1 en la base de datos")
+      
+      if not dates_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de dates_v1 en la base de datos")
+      
+      if not intro_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de intro_v1 en la base de datos")
+      
+      if not action_plan_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de action_plan_v1 en la base de datos")
+      
+      if not timeline_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de timeline_v1 en la base de datos")
+
+      if not required_extra_info_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de required_extra_info_v1 en la base de datos")
+
+      if not past_experience_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de past_experience_v1 en la base de datos")
+
+      if not closing_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de closing_v1 en la base de datos")
+
+      if not concatenated_supabase_response:
+        supabase_notes.append("No se han guardado las respuestas de informe concatenado en la base de datos")
+      
+      if len(promps_notes) > 0 or len(supabase_notes) > 0:
+        print(promps_notes)
+        print(supabase_notes)
+        return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+      else:
+        return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+
+    # owner_name_response = await owner_name_v1(owner_name_v1_params)
+    # requirements_summary_response = await requirements_summary_v1(requirements_summary_v1_params)
+    # goals_response = await goals_v1(goals_v1_params)
+    # dates_response = await dates_v1(dates_v1_params)
+    # intro_response = await intro_v1(intro_v1_params)
+    # action_plan_response = await action_plan_v1(action_plan_v1_params)
 
     #if not owner_name_response:
       #return JsonResponse({"message": "Error al procesar el prompt. Verifique el número de parámetros o llamadas externas."}, safe=False)
-    
-    if not owner_name_response:
-      promps_notes.append("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not requirements_summary_response:
-      promps_notes.append("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not goals_response:
-      promps_notes.append("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not dates_response:
-      promps_notes.append("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not intro_response:
-      promps_notes.append("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
-      
-    if not action_plan_response:
-      promps_notes.append("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not timeline_response:
-      promps_notes.append("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not required_extra_info_response:
-      promps_notes.append("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
-
-    if not past_experience_response:
-      promps_notes.append("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
-    
-    if not closing_response:
-      promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
-    
-    # Guardar la respuesta en Supabase (OPCIONAL)
-    owner_name_supabase_response = save_response_to_supabase(owner_name_response[0], owner_name_response[1])
-    requirements_summary_supabase_response = save_response_to_supabase(requirements_summary_response[0], requirements_summary_response[1])
-    goals_supabase_response = save_response_to_supabase(goals_response[0], goals_response[1])
-    dates_supabase_response = save_response_to_supabase(dates_response[0], dates_response[1])
-    intro_supabase_response = save_response_to_supabase(intro_response[0], intro_response[1])
-    action_plan_supabase_response = save_response_to_supabase(action_plan_response[0], action_plan_response[1])
-    timeline_supabase_response = save_response_to_supabase(timeline_response[0], timeline_response[1])
-    required_extra_info_supabase_response = save_response_to_supabase(required_extra_info_response[0], required_extra_info_response[1])
-    past_experience_supabase_response = save_response_to_supabase(past_experience_response[0], past_experience_response[1])
-    closing_supabase_response = save_response_to_supabase(closing_response[0], closing_response[1])
-
-    if not owner_name_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de owner_name_v1 en la base de datos")
-    
-    if not requirements_summary_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de requirements_summary_v1 en la base de datos")
-    
-    if not goals_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de goals_v1 en la base de datos")
-    
-    if not dates_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de dates_v1 en la base de datos")
-    
-    if not intro_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de intro_v1 en la base de datos")
-    
-    if not action_plan_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de action_plan_v1 en la base de datos")
-    
-    if not timeline_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de timeline_v1 en la base de datos")
-
-    if not required_extra_info_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de required_extra_info_v1 en la base de datos")
-
-    if not past_experience_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de past_experience_v1 en la base de datos")
-
-    if not closing_supabase_response:
-      supabase_notes.append("No se han guardado las respuestas de closing_v1 en la base de datos")
-
-    if len(promps_notes) > 0 or len(supabase_notes) > 0:
-      print(promps_notes)
-      print(supabase_notes)
-      return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
-    else:
-      return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
   except NameError:
-    print(NameError)
+    # print(NameError)
     return JsonResponse({"error": "Error al procesar la solicitud en el servidor"}, status=500)
 
 # @csrf_protect
@@ -242,7 +294,7 @@ def create_new_firebase_user(request):
 
     return JsonResponse({'message': 'Usuario creado', 'user': user_data})
   except Exception as error:
-    print(error)
+    # print(error)
     return JsonResponse({'error': 'Error al crear el usuario'}, status=401)
 
 # @api_view(['GET'])

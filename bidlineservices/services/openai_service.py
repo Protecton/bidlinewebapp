@@ -1,10 +1,10 @@
 from ..openai_client import init_openai
 
-def process_prompt_with_openai(content):
+async def process_prompt_with_openai(content):
   openai = init_openai()
 
   try:
-    openai_response = openai.chat.completions.create(
+    openai_response = await openai.chat.completions.create(
       model="gpt-4o-mini",
       messages=[{"role": "user", "content": content}]
     )
@@ -15,4 +15,3 @@ def process_prompt_with_openai(content):
   except Exception as e:
     print(f"An error occurred while processing with OpenAI: {e}")
     return None
-

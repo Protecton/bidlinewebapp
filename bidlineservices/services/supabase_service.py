@@ -33,5 +33,5 @@ def get_function_prompt_from_supabase(function_name):
 # Función para guardar la respuesta en la tabla 'openairesponses'
 def save_response_to_supabase(prompt, response):
   supabase = init_supabase()
-  insert_response = supabase.table("openairesponses").insert({"prompt": prompt, "response": response}).execute()
+  insert_response = supabase.table("openairesponses").insert({"prompt": prompt, "response": response, "company_id": 1}).execute()
   return bool(insert_response.data)

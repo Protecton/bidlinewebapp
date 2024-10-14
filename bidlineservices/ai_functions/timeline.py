@@ -2,10 +2,10 @@ from ..services.supabase_service import get_function_prompt_from_supabase
 from ..services.openai_service import process_prompt_with_openai
 from ..utils.utils import concatenar_valores
 
-def timeline_v1(params):
+async def timeline_v1(params):
   prompt = get_function_prompt_from_supabase("timeline_v1")
 
-  print(prompt)
+  # print(prompt)
 
   if not prompt:
     return None
@@ -18,7 +18,7 @@ def timeline_v1(params):
     processed_prompt = concatenar_valores(prompt_content, params)
     
     # Procesar el prompt con OpenAI
-    openai_response_content = process_prompt_with_openai(processed_prompt)
+    openai_response_content = await process_prompt_with_openai(processed_prompt)
     
     if not openai_response_content:
       return None
