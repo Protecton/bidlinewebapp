@@ -81,14 +81,16 @@ def get_proposal_data_by_id(proposal_id):
     return None
 
 # Función para guardar la respuesta en la tabla 'openairesponses'
-def save_response_to_supabase(prompt, response, company_id, prompt_tokens, completion_tokens):
+def save_response_to_supabase(prompt, response, company_id, prompt_tokens, completion_tokens, proposal_id, prompt_id):
   supabase = init_supabase()
   insert_response = supabase.table("openairesponses").insert({
     "prompt": prompt,
     "response": response,
     "company_id": company_id,
     "prompt_tokens": prompt_tokens,
-    "completion_tokens": completion_tokens
+    "completion_tokens": completion_tokens,
+    "proposal_id": proposal_id,
+    "prompt_id": prompt_id
   }).execute()
   return bool(insert_response.data)
 

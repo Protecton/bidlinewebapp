@@ -13,6 +13,7 @@ async def owner_name_v1(params):
   prompt_number_of_params = prompt["number_of_params"]
 
   if (len(params) == prompt_number_of_params):
+    prompt_id = prompt["id"]
     prompt_content = prompt["content"]
 
     processed_prompt = concatenar_valores(prompt_content, params)
@@ -23,6 +24,6 @@ async def owner_name_v1(params):
     if not openai_response_content:
       return None
     
-    return [processed_prompt, openai_response_content]
+    return [processed_prompt, openai_response_content, prompt_id]
   else:
     return None

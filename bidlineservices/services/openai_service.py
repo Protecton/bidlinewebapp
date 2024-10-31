@@ -20,11 +20,13 @@ async def process_prompt_with_openai(content):
     #     "reasoning_tokens": 0    }
     # }
     # openai_response_usage = openai_response.usage
+
     openai_response_usage_prompt_tokens = openai_response.usage.prompt_tokens
     openai_response_usage_completion_tokens = openai_response.usage.completion_tokens
 
-    print(openai_response_usage_prompt_tokens)
-    print(openai_response_usage_completion_tokens)
+    # print(openai_response_usage_prompt_tokens)
+    # print(openai_response_usage_completion_tokens)
+
     return [
       openai_response_content,
       {
