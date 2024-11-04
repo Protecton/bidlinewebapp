@@ -20,4 +20,6 @@ urlpatterns = [
   path('update-fbuser/', views.update_firebase_user),
   path('delete-fbuser/', views.delete_firebase_user),
   path('supabase/gettable', views.get_supabase_table),
+  path('upload-document/', views.upload_document),
+  path('delete-objects/', views.delete_all_rfp_objects),
 ]

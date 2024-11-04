@@ -1,16 +1,17 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse
 import json
-import weaviate
 import psycopg2
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes, parser_classes, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from firebase_admin import auth
 # from firebase_admin.auth import InvalidIdToken
 from .supabase_client import init_supabase
 from .openai_client import init_openai
+from .weaviate_client import weaviate_connection
 from decouple import config
 from django.views.decorators.csrf import csrf_exempt
 from random import randint
@@ -28,6 +29,7 @@ from .ai_functions.timeline import timeline_v1
 from .ai_functions.required_extra_info import required_extra_info_v1
 from .ai_functions.past_experience import past_experience_v1
 from .ai_functions.closing import closing_v1
+from .ai_functions.document_parser import extract_text_from_pdf, extract_text_from_word,slice_text, save_to_supabase, save_to_weaviate
 
 # from .models import Project, Tasks
 # from .forms import CreateNewTask, CreateNewProject
@@ -713,17 +715,6 @@ def protected_view(request):
 
 # @api_view(['POST'])
 # @permission_classes([IsAuthenticated])
-def weaviate_connection():
-  client = weaviate.Client(
-     url = "https://o8rdynkss2uddb4ldicfsg.c0.us-central1.gcp.weaviate.cloud",  # Replace with your endpoint
-     auth_client_secret=weaviate.AuthApiKey(config('api_key_weaviate')),  # Replace w/ your Weaviate instance API key
-     additional_headers = {
-         "X-OpenAI-Api-Key": config('OPENAI_APIKEY')  # Replace with your inference API key
-     }
-  )
-
-
-  return client
 
 def create_db_connection():
   """
@@ -1020,6 +1011,87 @@ def bid_slice_text(request, text):
 
   return JsonResponse(final_output, safe=False)
 
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([AllowAny])
+def upload_document(request):
+    # Check if 'file' is in the request
+    if 'file' not in request.FILES:
+        return Response({"error": "No file part"}, status=400)
+    
+    file = request.FILES['file']
+    file_name = file.name
+    
+    # Ensure 'rfp_id' is included in the request data for the upsert
+    rfp_id = request.data.get('rfp_id')
+    user_id = request.data.get('user_id')
+    proposal_id = request.data.get('proposal_id')
+    company_id = request.data.get('company_id')
+
+    if not rfp_id:
+        return Response({"error": "rfp_id is required."}, status=400)
+    
+    if not user_id:
+        return Response({"error": "user_id is required."}, status=400)
+
+    try:
+        # Extract text from the file based on its type
+        if file_name.endswith('.pdf'):
+            text = extract_text_from_pdf(file)
+        elif file_name.endswith('.docx'):
+            text = extract_text_from_word(file)
+        else:
+            return Response({"error": "Unsupported file format. Please upload a .pdf or .docx file."}, status=400)
+
+        # Slice the extracted text
+        text_slices = slice_text(text)
+
+        # Save slices to Supabase with upsert logic
+        save_to_supabase(text_slices, rfp_id, user_id, proposal_id, company_id)
+
+        # Weaviate functionality will be added here later
+        save_to_weaviate(text_slices, rfp_id, proposal_id, user_id, company_id)
+
+        return Response({
+            "message": "File processed and saved successfully",
+            "rfp_id": rfp_id,
+            "user_id": user_id,
+            "proposal_id": proposal_id,
+            "company_id": company_id,
+            "slices": text_slices  # For debugging, you may want to remove this in production
+        }, status=200)
+
+
+    except Exception as e:
+        return Response({"error": f"An error occurred: {e}"}, status=500)
+
+@api_view(['DELETE'])
+@permission_classes([AllowAny])    
+def delete_all_rfp_objects(request):
+    client = weaviate_connection()
+    
+    # Query all RFP object IDs
+    result = client.query.raw("""
+    {
+        Get {
+            RFP {
+                _additional {
+                    id
+                }
+            }
+        }
+    }
+    """)
+    
+    # Extract IDs from result and delete each object
+    if 'data' in result and 'Get' in result['data'] and 'RFP' in result['data']['Get']:
+        for obj in result['data']['Get']['RFP']:
+            object_id = obj['_additional']['id']
+            client.data_object.delete(object_id, class_name="RFP")
+            print(f"Deleted object with ID: {object_id}")
+    else:
+        print("No objects found in RFP class.")
+    
 # @api_view(['GET'])
 def unprotected_view(request):
     return HttpResponse(f'<h1>Welcome to Bidline Services</h1>')
