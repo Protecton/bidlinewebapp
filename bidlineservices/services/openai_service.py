@@ -1,5 +1,8 @@
 from ..openai_client import init_openai
 
+# cs_temperature = 0.7
+# cs_top_p = 0.4
+
 async def process_prompt_with_openai(content):
   openai = init_openai()
 
@@ -7,6 +10,8 @@ async def process_prompt_with_openai(content):
     openai_response = await openai.chat.completions.create(
       model="gpt-4o-mini",
       messages=[{"role": "user", "content": content}]
+      # temperature=cs_temperature,
+      # top_p=cs_top_p
     )
 
     openai_response_content = openai_response.choices[0].message.content
