@@ -20,7 +20,7 @@ def extract_text_from_word(file_path):
     return '\n'.join([paragraph.text for paragraph in doc.paragraphs])
 
 # Function to slice text into smaller chunks
-def slice_text(text, chunk_size=500):
+def slice_text(text, chunk_size=1000):
     return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
 def save_to_supabase(slices, rfp_id, user_id, proposal_id, company_id):
@@ -112,13 +112,3 @@ def save_to_weaviate(slices, rfp_id, proposal_id, user_id, company_id):
 
 
 
-# Main function to handle PDF/Word, extract, slice, and save to Postgres and Weaviate
-def process_and_store_document(file_path):
-    if file_path.endswith('.pdf'):
-        text = extract_text_from_pdf(file_path)
-    elif file_path.endswith('.docx'):
-        text = extract_text_from_word(file_path)
-    else:
-        raise ValueError("Unsupported file format. Please provide a .pdf or .docx file.")
-    
-    text_slices = slice_text(text)
