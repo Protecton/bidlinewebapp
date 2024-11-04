@@ -56,6 +56,7 @@ def get_proposal_data_by_id(proposal_id):
     request_for_proposal_response = supabase.table("requests_for_proposals").select("*").eq("proposal_id", proposal_id).execute()
 
     request_for_proposal_prompt = request_for_proposal_response.data[0]["description"]
+    request_for_proposal_id = request_for_proposal_response.data[0]["id"]
     
     if not proposal_response.data:
       request_for_proposal_prompt = "No request for proposal"
@@ -74,7 +75,8 @@ def get_proposal_data_by_id(proposal_id):
       request_for_proposal_prompt,
       company_information,
       past_projects,
-      proposal_company_id
+      proposal_company_id,
+      request_for_proposal_id
     ]
   except Exception as e:
     print(f"An error occurred while processing with Supabase and getting proposal {proposal_id}: {e}")
@@ -103,3 +105,16 @@ def save_proposal_summary(proposal_id, summary_content):
   supabase = init_supabase()
   update_response = supabase.table("proposals").update({"summary": summary_content}).eq("id", proposal_id).execute()
   return bool(update_response.data)
+
+def save_reminder(proposal_id, name, description, reminder_date, request_for_proposal_id):
+  supabase = init_supabase()
+  insert_response = supabase.table("reminders").insert({
+    "proposal_id": proposal_id,
+    "user_id": 1,
+    "name": name,
+    "description": description,
+    "reminder_date": reminder_date,
+    "requests_for_proposal_id": request_for_proposal_id,
+    "status_id": 3
+  }).execute()
+  return bool(insert_response.data)

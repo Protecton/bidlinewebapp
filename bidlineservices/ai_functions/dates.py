@@ -1,5 +1,5 @@
 from ..services.supabase_service import get_function_prompt_from_supabase
-from ..services.openai_service import process_prompt_with_openai
+from ..services.openai_service import process_prompt_with_openai, process_reminders_prompt_with_openai
 from ..utils.utils import concatenar_valores
 
 async def dates_v1(params):
@@ -19,7 +19,7 @@ async def dates_v1(params):
     processed_prompt = concatenar_valores(prompt_content, params)
     
     # Procesar el prompt con OpenAI
-    openai_response_content = await process_prompt_with_openai(processed_prompt)
+    openai_response_content = await process_reminders_prompt_with_openai(processed_prompt)
     
     if not openai_response_content:
       return None

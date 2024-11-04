@@ -17,7 +17,7 @@ from random import randint
 from datetime import datetime
 import asyncio
 
-from .services.supabase_service import save_response_to_supabase, get_proposal_data_by_id, save_proposal_content, save_proposal_summary
+from .services.supabase_service import save_response_to_supabase, get_proposal_data_by_id, save_proposal_content, save_proposal_summary, save_reminder
 from .ai_functions.owner_name import owner_name_v1
 from .ai_functions.requirements_summary import requirements_summary_v1
 from .ai_functions.goals import goals_v1
@@ -267,6 +267,7 @@ async def process_proposal(request):
     company_info = proposal_promps[1]
     past_projects = proposal_promps[2]
     company_id = proposal_promps[3]
+    request_for_proposal_id = proposal_promps[4]
 
     owner_name_v1_params = [request_for_proposal]
     requirements_summary_v1_params = [request_for_proposal]
@@ -275,314 +276,335 @@ async def process_proposal(request):
     intro_v1_params = [company_info, request_for_proposal]
     action_plan_v1_params = [company_info, request_for_proposal]
 
+    intro_response = await intro_v1(intro_v1_params)
+    action_plan_response = await action_plan_v1(action_plan_v1_params)
+
+    timeline_v1_params = [company_info, action_plan_response[1][0], request_for_proposal]
+    required_extra_info_v1_params = [company_info, action_plan_response[1][0], request_for_proposal, request_for_proposal]
+    past_experience_v1_params = [company_info, action_plan_response[1][0], request_for_proposal, past_projects, request_for_proposal]
+
+    past_experience_response = await past_experience_v1(past_experience_v1_params)
+
+    closing_v1_params = [request_for_proposal, company_info, action_plan_response[1][0], past_projects, past_experience_response[1][0], intro_response[1][0]]
+
     tasks = [
-      asyncio.create_task(intro_v1(intro_v1_params)),
-      asyncio.create_task(action_plan_v1(action_plan_v1_params)),
       asyncio.create_task(owner_name_v1(owner_name_v1_params)),
       asyncio.create_task(requirements_summary_v1(requirements_summary_v1_params)),
       asyncio.create_task(goals_v1(goals_v1_params)),
-      asyncio.create_task(dates_v1(dates_v1_params))
+      asyncio.create_task(dates_v1(dates_v1_params)),
+      asyncio.create_task(timeline_v1(timeline_v1_params)),
+      asyncio.create_task(required_extra_info_v1(required_extra_info_v1_params)),
+      asyncio.create_task(closing_v1(closing_v1_params))
     ]
 
+    tasks = {
+      "owner_name_response": asyncio.create_task(owner_name_v1(owner_name_v1_params)),
+      "requirements_summary_response": asyncio.create_task(requirements_summary_v1(requirements_summary_v1_params)),
+      "goals_response": asyncio.create_task(goals_v1(goals_v1_params)),
+      "dates_response": asyncio.create_task(dates_v1(dates_v1_params)),
+      "goals_response": asyncio.create_task(goals_v1(goals_v1_params)),
+      "timeline_response": asyncio.create_task(timeline_v1(timeline_v1_params)),
+      "required_extra_info_response": asyncio.create_task(required_extra_info_v1(required_extra_info_v1_params)),
+      "closing_response": asyncio.create_task(closing_v1(closing_v1_params))
+    }
+
     completed_count = 0
-    threshold = 2  # Queremos ejecutar `next_operation` cuando 2 tareas hayan terminado
-    collected_results = []  # Lista para almacenar los resultados de las tareas completadas
+    threshold = 7 # Queremos ejecutar `next_operation` cuando 8 tareas hayan terminado
+    collected_results = {} # Lista para almacenar los resultados de las tareas completadas
 
     while completed_count < threshold:
       # Espera a que una tarea termine
-      done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+      done, pending = await asyncio.wait(tasks.values(), return_when=asyncio.FIRST_COMPLETED)
 
       # Recoger los resultados de las tareas completadas
       for task in done:
-        collected_results.append(task.result())
+          # Buscar la clave de la tarea completada en el diccionario de tareas
+          for key, value in tasks.items():
+              if value == task:
+                  collected_results[key] = task.result()
+                  break
       
       # Incrementar el contador de tareas completadas
       completed_count += len(done)
 
-      # Actualizar las tareas pendientes
-      tasks = list(pending)
+      tasks = {k: v for k, v in tasks.items() if v in pending}
 
-      # print(f"Tareas completadas: {completed_count}")
+    owner_name_response = collected_results.get("owner_name_response")
+    requirements_summary_response = collected_results.get("requirements_summary_response")
+    goals_response = collected_results.get("goals_response")
+    dates_response = collected_results.get("dates_response")
+    timeline_response = collected_results.get("timeline_response")
+    required_extra_info_response = collected_results.get("required_extra_info_response")
+    closing_response = collected_results.get("closing_response")
 
-    # Cuando se hayan completado el número de tareas especificadas, ejecutamos `next_operation`
-    if collected_results:
-      
-      intro_response = collected_results[0]
-      action_plan_response = collected_results[1]
-
-      timeline_v1_params = [company_info, action_plan_response[1][0], request_for_proposal]
-      required_extra_info_v1_params = [company_info, action_plan_response[1][0], request_for_proposal, request_for_proposal]
-      past_experience_v1_params = [company_info, action_plan_response[1][0], request_for_proposal, past_projects, request_for_proposal]
-
-      timeline_response = await timeline_v1(timeline_v1_params)
-      required_extra_info_response = await required_extra_info_v1(required_extra_info_v1_params)
-      past_experience_response = await past_experience_v1(past_experience_v1_params)
-
-      closing_v1_params = [request_for_proposal, company_info, action_plan_response[1][0], past_projects, past_experience_response[1][0], intro_response[1][0]]
-      
-      closing_response = await closing_v1(closing_v1_params)
-
-      # Esperar las tareas restantes (si las hay)
-      for task in tasks:
-        result = await task
-        collected_results.append(result)
-      
-      owner_name_response = collected_results[2]
-      requirements_summary_response = collected_results[3]
-      goals_response = collected_results[4]
-      dates_response = collected_results[5]
-
-      if not owner_name_response:
-        # print("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
+    if not owner_name_response:
+      # print("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado owner_name_v1 y por lo tanto no se han obtenido respuestas")
+  
+    if not requirements_summary_response:
+      # print("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
     
-      if not requirements_summary_response:
-        # print("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado requirements_summary_v1 y por lo tanto no se han obtenido respuestas")
+    if not goals_response:
+      # print("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not dates_response:
+      # print("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not intro_response:
+      # print("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
       
-      if not goals_response:
-        # print("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado goals_v1 y por lo tanto no se han obtenido respuestas")
-      
-      if not dates_response:
-        # print("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado dates_v1 y por lo tanto no se han obtenido respuestas")
-      
-      if not intro_response:
-        # print("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado intro_v1 y por lo tanto no se han obtenido respuestas")
-        
-      if not action_plan_response:
-        # print("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
-      
-      if not timeline_response:
-        # print("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
-      
-      if not required_extra_info_response:
-        # print("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
+    if not action_plan_response:
+      # print("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado action_plan_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not timeline_response:
+      # print("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado timeline_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not required_extra_info_response:
+      # print("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado required_extra_info_v1 y por lo tanto no se han obtenido respuestas")
 
-      if not past_experience_response:
-        # print("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
-      
-      if not closing_response:
-        # print("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
-        promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
-      
-      # print("======================= INICIO RESPONSES =======================")
-      # print("======================= owner_name_response =======================")
-      # print("======================= ***** =======================")
+    if not past_experience_response:
+      # print("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado past_experience_v1 y por lo tanto no se han obtenido respuestas")
+    
+    if not closing_response:
+      # print("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
+      promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
+    
+    # print("======================= INICIO RESPONSES =======================")
+    # print("======================= owner_name_response =======================")
+    # print("======================= ***** =======================")
 
-      
-      # print(owner_name_response)
+    
+    # print(owner_name_response[1][0])
 
-      # print("======================= requirements_summary_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(requirements_summary_response)
+    # print("======================= requirements_summary_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(requirements_summary_response[1][0])
 
-      # print("======================= goals_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(goals_response)
+    # print("======================= goals_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(goals_response[1][0])
 
-      # print("======================= dates_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(dates_response)
+    print("======================= dates_response =======================")
+    print("======================= ***** =======================")
+    print("======================= ***** =======================")
+    
+    print(dates_response[1][0])
 
-      # print("======================= intro_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(intro_response)
+    # print("======================= intro_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(intro_response[1][0])
 
-      # print("======================= action_plan_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(action_plan_response)
+    # print("======================= action_plan_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(action_plan_response[1][0])
 
-      # print("======================= timeline_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(timeline_response)
+    # print("======================= timeline_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(timeline_response[1][0])
 
-      # print("======================= required_extra_info_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(required_extra_info_response)
+    # print("======================= required_extra_info_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(required_extra_info_response[1][0])
 
-      # print("======================= past_experience_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(past_experience_response)
+    # print("======================= past_experience_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(past_experience_response[1][0])
 
-      # print("======================= closing_response =======================")
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      
-      # print(closing_response)
+    # print("======================= closing_response =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    
+    # print(closing_response[1][0])
 
-      # print("======================= ***** =======================")
-      # print("======================= ***** =======================")
-      # print("======================= FIN RESPONSES =======================")
+    # print("======================= ***** =======================")
+    # print("======================= ***** =======================")
+    # print("======================= FIN RESPONSES =======================")
 
-      # Guardar la respuesta en Supabase (OPCIONAL)
-      owner_name_supabase_response = save_response_to_supabase(
-        owner_name_response[0],
-        owner_name_response[1][0],
-        company_id,
-        owner_name_response[1][1]["prompt_tokens"],
-        owner_name_response[1][1]["completion_tokens"],
-        proposal_id,
-        owner_name_response[2] # prompt_id
-      )
-      requirements_summary_supabase_response = save_response_to_supabase(
-        requirements_summary_response[0],
-        requirements_summary_response[1][0],
-        company_id,
-        requirements_summary_response[1][1]["prompt_tokens"],
-        requirements_summary_response[1][1]["completion_tokens"],
-        proposal_id,
-        requirements_summary_response[2] # prompt_id
-      )
-      goals_supabase_response = save_response_to_supabase(
-        goals_response[0],
-        goals_response[1][0],
-        company_id,
-        goals_response[1][1]["prompt_tokens"],
-        goals_response[1][1]["completion_tokens"],
-        proposal_id,
-        goals_response[2] # prompt_id
-      )
-      dates_supabase_response = save_response_to_supabase(
-        dates_response[0],
-        dates_response[1][0],
-        company_id,
-        dates_response[1][1]["prompt_tokens"],
-        dates_response[1][1]["completion_tokens"],
-        proposal_id,
-        dates_response[2] # prompt_id
-      )
-      intro_supabase_response = save_response_to_supabase(
-        intro_response[0],
-        intro_response[1][0],
-        company_id,
-        intro_response[1][1]["prompt_tokens"],
-        intro_response[1][1]["completion_tokens"],
-        proposal_id,
-        intro_response[2] # prompt_id
-      )
-      action_plan_supabase_response = save_response_to_supabase(
-        action_plan_response[0],
-        action_plan_response[1][0],
-        company_id,
-        action_plan_response[1][1]["prompt_tokens"],
-        action_plan_response[1][1]["completion_tokens"],
-        proposal_id,
-        action_plan_response[2] # prompt_id
-      )
-      timeline_supabase_response = save_response_to_supabase(
-        timeline_response[0],
-        timeline_response[1][0],
-        company_id,
-        timeline_response[1][1]["prompt_tokens"],
-        timeline_response[1][1]["completion_tokens"],
-        proposal_id,
-        timeline_response[2] # prompt_id
-      )
-      required_extra_info_supabase_response = save_response_to_supabase(
-        required_extra_info_response[0],
-        required_extra_info_response[1][0],
-        company_id,
-        required_extra_info_response[1][1]["prompt_tokens"],
-        required_extra_info_response[1][1]["completion_tokens"],
-        proposal_id,
-        required_extra_info_response[2] # prompt_id
-      )
-      past_experience_supabase_response = save_response_to_supabase(
-        past_experience_response[0],
-        past_experience_response[1][0],
-        company_id,
-        past_experience_response[1][1]["prompt_tokens"],
-        past_experience_response[1][1]["completion_tokens"],
-        proposal_id,
-        past_experience_response[2] # prompt_id
-      )
-      closing_supabase_response = save_response_to_supabase(
-        closing_response[0],
-        closing_response[1][0],
-        company_id,
-        closing_response[1][1]["prompt_tokens"],
-        closing_response[1][1]["completion_tokens"],
-        proposal_id,
-        closing_response[2] # prompt_id
-      )
+    # Guardar la respuesta en Supabase (OPCIONAL)
+    owner_name_supabase_response = save_response_to_supabase(
+      owner_name_response[0],
+      owner_name_response[1][0],
+      company_id,
+      owner_name_response[1][1]["prompt_tokens"],
+      owner_name_response[1][1]["completion_tokens"],
+      proposal_id,
+      owner_name_response[2] # prompt_id
+    )
+    requirements_summary_supabase_response = save_response_to_supabase(
+      requirements_summary_response[0],
+      requirements_summary_response[1][0],
+      company_id,
+      requirements_summary_response[1][1]["prompt_tokens"],
+      requirements_summary_response[1][1]["completion_tokens"],
+      proposal_id,
+      requirements_summary_response[2] # prompt_id
+    )
+    goals_supabase_response = save_response_to_supabase(
+      goals_response[0],
+      goals_response[1][0],
+      company_id,
+      goals_response[1][1]["prompt_tokens"],
+      goals_response[1][1]["completion_tokens"],
+      proposal_id,
+      goals_response[2] # prompt_id
+    )
+    dates_supabase_response = save_response_to_supabase(
+      dates_response[0],
+      dates_response[1][0],
+      company_id,
+      dates_response[1][1]["prompt_tokens"],
+      dates_response[1][1]["completion_tokens"],
+      proposal_id,
+      dates_response[2] # prompt_id
+    )
+    intro_supabase_response = save_response_to_supabase(
+      intro_response[0],
+      intro_response[1][0],
+      company_id,
+      intro_response[1][1]["prompt_tokens"],
+      intro_response[1][1]["completion_tokens"],
+      proposal_id,
+      intro_response[2] # prompt_id
+    )
+    action_plan_supabase_response = save_response_to_supabase(
+      action_plan_response[0],
+      action_plan_response[1][0],
+      company_id,
+      action_plan_response[1][1]["prompt_tokens"],
+      action_plan_response[1][1]["completion_tokens"],
+      proposal_id,
+      action_plan_response[2] # prompt_id
+    )
+    timeline_supabase_response = save_response_to_supabase(
+      timeline_response[0],
+      timeline_response[1][0],
+      company_id,
+      timeline_response[1][1]["prompt_tokens"],
+      timeline_response[1][1]["completion_tokens"],
+      proposal_id,
+      timeline_response[2] # prompt_id
+    )
+    required_extra_info_supabase_response = save_response_to_supabase(
+      required_extra_info_response[0],
+      required_extra_info_response[1][0],
+      company_id,
+      required_extra_info_response[1][1]["prompt_tokens"],
+      required_extra_info_response[1][1]["completion_tokens"],
+      proposal_id,
+      required_extra_info_response[2] # prompt_id
+    )
+    past_experience_supabase_response = save_response_to_supabase(
+      past_experience_response[0],
+      past_experience_response[1][0],
+      company_id,
+      past_experience_response[1][1]["prompt_tokens"],
+      past_experience_response[1][1]["completion_tokens"],
+      proposal_id,
+      past_experience_response[2] # prompt_id
+    )
+    closing_supabase_response = save_response_to_supabase(
+      closing_response[0],
+      closing_response[1][0],
+      company_id,
+      closing_response[1][1]["prompt_tokens"],
+      closing_response[1][1]["completion_tokens"],
+      proposal_id,
+      closing_response[2] # prompt_id
+    )
 
-      concatenated_supabase_response = save_response_to_supabase(
-        "Intro, Proposal, Closing",
-        f"{intro_response[1][0]} {action_plan_response[1][0]} {closing_response[1][0]}",
-        company_id,
-        0,
-        0,
-        proposal_id,
-        0 # prompt_id
-      )
-      
-      proposal_content_processed = save_proposal_content(proposal_id, f"{intro_response[1][0]} {action_plan_response[1][0]} {closing_response[1][0]}")
-      proposal_summary_processed = save_proposal_summary(proposal_id, requirements_summary_response[1][0])
+    concatenated_supabase_response = save_response_to_supabase(
+      "Intro, Proposal, Closing",
+      f"{intro_response[1][0]} {action_plan_response[1][0]} {closing_response[1][0]}",
+      company_id,
+      0,
+      0,
+      proposal_id,
+      0 # prompt_id
+    )
+    
+    proposal_content_processed = save_proposal_content(proposal_id, f"{intro_response[1][0]} {action_plan_response[1][0]} {closing_response[1][0]}")
+    proposal_summary_processed = save_proposal_summary(proposal_id, requirements_summary_response[1][0])
 
-      if not owner_name_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de owner_name_v1 en la base de datos")
+    try:
+      #dates_response[1][0]
+      # Supongamos que esta es la respuesta que obtuviste
+      reminders = dates_response[1][0] # [{"date": "2025-02-01", "name": "Platform Readiness", "description": "The platform should be ready before February 2025."}]
       
-      if not requirements_summary_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de requirements_summary_v1 en la base de datos")
-      
-      if not goals_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de goals_v1 en la base de datos")
-      
-      if not dates_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de dates_v1 en la base de datos")
-      
-      if not intro_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de intro_v1 en la base de datos")
-      
-      if not action_plan_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de action_plan_v1 en la base de datos")
-      
-      if not timeline_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de timeline_v1 en la base de datos")
+      # Convertimos la respuesta JSON a una lista de Python
+      arguments_data = json.loads(reminders)
+      dates = arguments_data["dates"]
 
-      if not required_extra_info_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de required_extra_info_v1 en la base de datos")
+      print("SHOWING REMINDERS")
+      # Ahora puedes trabajar con la lista de fechas
+      for reminder in dates:
+        print(reminder)
+        save_reminder(proposal_id, reminder["name"], reminder["description"], reminder["date"], request_for_proposal_id)
+    except NameError:
+      print("No reminders saved")
 
-      if not past_experience_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de past_experience_v1 en la base de datos")
+    if not owner_name_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de owner_name_v1 en la base de datos")
+    
+    if not requirements_summary_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de requirements_summary_v1 en la base de datos")
+    
+    if not goals_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de goals_v1 en la base de datos")
+    
+    if not dates_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de dates_v1 en la base de datos")
+    
+    if not intro_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de intro_v1 en la base de datos")
+    
+    if not action_plan_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de action_plan_v1 en la base de datos")
+    
+    if not timeline_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de timeline_v1 en la base de datos")
 
-      if not closing_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de closing_v1 en la base de datos")
+    if not required_extra_info_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de required_extra_info_v1 en la base de datos")
 
-      if not concatenated_supabase_response:
-        supabase_notes.append("No se han guardado las respuestas de informe concatenado en la base de datos")
-      
-      # print("PROCESS FINISHED")
+    if not past_experience_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de past_experience_v1 en la base de datos")
 
-      if len(promps_notes) > 0 or len(supabase_notes) > 0:
-        print(promps_notes)
-        print(supabase_notes)
-        return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
-      else:
-        return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+    if not closing_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de closing_v1 en la base de datos")
+
+    if not concatenated_supabase_response:
+      supabase_notes.append("No se han guardado las respuestas de informe concatenado en la base de datos")
+    
+    # print("PROCESS FINISHED")
+
+    if len(promps_notes) > 0 or len(supabase_notes) > 0:
+      print(promps_notes)
+      print(supabase_notes)
+      return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+    else:
+      return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
 
     # owner_name_response = await owner_name_v1(owner_name_v1_params)
     # requirements_summary_response = await requirements_summary_v1(requirements_summary_v1_params)
