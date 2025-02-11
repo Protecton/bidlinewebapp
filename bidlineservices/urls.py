@@ -11,6 +11,7 @@ urlpatterns = [
   path('insert-phrase/', views.insert_phrase),
   # path('process-supabase-openai-prompt/', views.process_supabase_openai_prompt),
   path('process-proposal/', views.process_proposal),
+  path('process-proposal-suggested/', views.process_proposal_suggested),
   path('get_collections/', views.get_collections),
   path('create_db_connection/', views.create_db_connection),
   path('execute_queries/', views.execute_queries),

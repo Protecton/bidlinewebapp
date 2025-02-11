@@ -18,7 +18,7 @@ from random import randint
 from datetime import datetime
 import asyncio
 
-from .services.supabase_service import save_response_to_supabase, get_proposal_data_by_id, save_proposal_content, save_proposal_summary, save_reminder
+from .services.supabase_service import save_response_to_supabase, get_proposal_data_by_id, get_proposal_data_for_suggested_by_id, save_proposal_content, save_proposal_summary, save_reminder, save_suggested_product_services, save_suggested_talent
 from .ai_functions.owner_name import owner_name_v1
 from .ai_functions.requirements_summary import requirements_summary_v1
 from .ai_functions.goals import goals_v1
@@ -29,6 +29,8 @@ from .ai_functions.timeline import timeline_v1
 from .ai_functions.required_extra_info import required_extra_info_v1
 from .ai_functions.past_experience import past_experience_v1
 from .ai_functions.closing import closing_v1
+from .ai_functions.suggested_services import suggested_services_v1
+from .ai_functions.suggested_talents import suggested_talents_v1
 from .ai_functions.document_parser import extract_text_from_pdf, extract_text_from_word,slice_text, save_to_supabase, save_to_weaviate
 
 # from .models import Project, Tasks
@@ -378,71 +380,6 @@ async def process_proposal(request):
     if not closing_response:
       # print("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
       promps_notes.append("No se ha procesado closing_v1 y por lo tanto no se han obtenido respuestas")
-    
-    # print("======================= INICIO RESPONSES =======================")
-    # print("======================= owner_name_response =======================")
-    # print("======================= ***** =======================")
-
-    
-    # print(owner_name_response[1][0])
-
-    # print("======================= requirements_summary_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(requirements_summary_response[1][0])
-
-    # print("======================= goals_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(goals_response[1][0])
-
-    print("======================= dates_response =======================")
-    print("======================= ***** =======================")
-    print("======================= ***** =======================")
-    
-    print(dates_response[1][0])
-
-    # print("======================= intro_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(intro_response[1][0])
-
-    # print("======================= action_plan_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(action_plan_response[1][0])
-
-    # print("======================= timeline_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(timeline_response[1][0])
-
-    # print("======================= required_extra_info_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(required_extra_info_response[1][0])
-
-    # print("======================= past_experience_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(past_experience_response[1][0])
-
-    # print("======================= closing_response =======================")
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    
-    # print(closing_response[1][0])
-
-    # print("======================= ***** =======================")
-    # print("======================= ***** =======================")
-    # print("======================= FIN RESPONSES =======================")
 
     # Guardar la respuesta en Supabase (OPCIONAL)
     owner_name_supabase_response = save_response_to_supabase(
@@ -550,16 +487,12 @@ async def process_proposal(request):
     proposal_summary_processed = save_proposal_summary(proposal_id, requirements_summary_response[1][0])
 
     try:
-      #dates_response[1][0]
-      # Supongamos que esta es la respuesta que obtuviste
       reminders = dates_response[1][0] # [{"date": "2025-02-01", "name": "Platform Readiness", "description": "The platform should be ready before February 2025."}]
       
       # Convertimos la respuesta JSON a una lista de Python
       arguments_data = json.loads(reminders)
       dates = arguments_data["dates"]
 
-      print("SHOWING REMINDERS")
-      # Ahora puedes trabajar con la lista de fechas
       for reminder in dates:
         print(reminder)
         save_reminder(proposal_id, reminder["name"], reminder["description"], reminder["date"], request_for_proposal_id)
@@ -599,24 +532,111 @@ async def process_proposal(request):
     if not concatenated_supabase_response:
       supabase_notes.append("No se han guardado las respuestas de informe concatenado en la base de datos")
     
-    # print("PROCESS FINISHED")
-
     if len(promps_notes) > 0 or len(supabase_notes) > 0:
-      print(promps_notes)
-      print(supabase_notes)
       return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
     else:
       return JsonResponse({"message": "Respuesta procesada y guardada exitosamente"}, safe=False)
+  except NameError:
+    # print(NameError)
+    return JsonResponse({"error": "Error al procesar la solicitud en el servidor"}, status=500)
 
-    # owner_name_response = await owner_name_v1(owner_name_v1_params)
-    # requirements_summary_response = await requirements_summary_v1(requirements_summary_v1_params)
-    # goals_response = await goals_v1(goals_v1_params)
-    # dates_response = await dates_v1(dates_v1_params)
-    # intro_response = await intro_v1(intro_v1_params)
-    # action_plan_response = await action_plan_v1(action_plan_v1_params)
+# Bloques asíncronos
+@csrf_exempt
+async def process_proposal_suggested(request):
+  try:
+    promps_notes = []
+    supabase_notes = []
 
-    #if not owner_name_response:
-      #return JsonResponse({"message": "Error al procesar el prompt. Verifique el número de parámetros o llamadas externas."}, safe=False)
+    request_body = json.loads(request.body.decode('utf-8'))
+
+    proposal_id = request_body['proposal_id']
+
+    proposal_promps = get_proposal_data_for_suggested_by_id(proposal_id)
+
+    request_for_proposal = proposal_promps[0]
+    company_info = proposal_promps[1]
+    past_projects = proposal_promps[2]
+    product_services = proposal_promps[3]
+    company_id = proposal_promps[4]
+    request_for_proposal_id = proposal_promps[5]
+    talents = proposal_promps[6]
+
+    intro_v1_params = [company_info, request_for_proposal]
+    action_plan_v1_params = [company_info, request_for_proposal]
+
+    intro_response = await intro_v1(intro_v1_params)
+    action_plan_response = await action_plan_v1(action_plan_v1_params)
+
+    past_experience_v1_params = [company_info, action_plan_response[1][0], request_for_proposal, past_projects, request_for_proposal]
+
+    past_experience_response = await past_experience_v1(past_experience_v1_params)
+
+    suggested_services_v1_params = [
+      request_for_proposal,
+      company_info,
+      action_plan_response[1][0],
+      past_projects,
+      past_experience_response[1][0],
+      intro_response[1][0],
+      product_services
+      # request_for_proposal
+    ]
+
+    print("SERVICES FOR PARAMS")
+    print(product_services)
+
+    suggested_services_response = await suggested_services_v1(suggested_services_v1_params)
+    
+    print("SERVICES SUGGESTED")
+
+    services_data = json.loads(suggested_services_response[1][0])
+    suggestedservices = services_data["suggestedservices"]
+
+    print(suggestedservices)
+
+    try:
+      for suggestedservice in suggestedservices:
+        print(suggestedservice)
+        save_suggested_product_services(proposal_id, suggestedservice["id"])
+    except NameError:
+      print("No suggested product services saved")
+
+    suggested_talents_v1_params = [
+      request_for_proposal,
+      company_info,
+      action_plan_response[1][0],
+      past_projects,
+      past_experience_response[1][0],
+      intro_response[1][0],
+      json.dumps(suggestedservices),
+      json.dumps(talents)
+      # request_for_proposal,
+      # suggestedservices
+    ]
+
+    suggested_talents_response = await suggested_talents_v1(suggested_talents_v1_params)
+    print("TALENTS SUGGESTED")
+
+    talents_data = json.loads(suggested_talents_response[1][0])
+    suggestedtalents = talents_data["suggestedtalents"]
+
+    print(suggestedtalents)
+
+    try:
+      for suggestedtalent in suggestedtalents:
+        print(suggestedtalent)
+        save_suggested_talent(proposal_id, suggestedtalent["id"])
+    except NameError:
+      print("No suggested talents saved")
+
+    if len(promps_notes) > 0 or len(supabase_notes) > 0:
+      return JsonResponse({"error": "Error al guardar la respuesta en la base de datos"}, status=500)
+    else:
+      return JsonResponse({
+        "message": "Respuesta procesada y guardada exitosamente",
+        "suggested_services": suggestedservices,
+        "suggested_talents": suggestedtalents
+      }, safe=False)
   except NameError:
     # print(NameError)
     return JsonResponse({"error": "Error al procesar la solicitud en el servidor"}, status=500)
@@ -798,8 +818,6 @@ def execute_queries(request):
       return JsonResponse({"status": "error", "message": str(e)})
   finally:
       cur.close()  
-   
-
 
 def bid_slice_text(request, text):
   class Document:
